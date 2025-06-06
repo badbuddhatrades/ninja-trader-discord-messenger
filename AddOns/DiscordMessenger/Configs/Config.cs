@@ -11,17 +11,13 @@ namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Configs
         private Config()
         {
             WebhookUrls = new List<string>();
+            ScreenshotLocation = string.Empty;
+            EmbededColor = Brushes.Transparent;
         }
 
-        public static Config Instance
-        {
-            get
-            {
-                return _instance;
-            }
-        }
+        public static Config Instance => _instance;
 
-        public List<string> WebhookUrls { get; set; }
+        public List<string> WebhookUrls { get; private set; }
         public Account Account { get; set; }
         public string AccountName { get; set; }
         public string ScreenshotLocation { get; set; }

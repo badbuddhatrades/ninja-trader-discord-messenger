@@ -12,127 +12,87 @@ namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Services
     public class TradingStatusService
     {
         private readonly TradingStatusEvents _tradingStatusEvents;
-        private Account _account;
-        private List<Position> _positions;
-        private List<OrderEntry> _orderEntries;
+        private readonly Account _account;
+
+        private List<Position> _positions = new();
+        private List<OrderEntry> _orderEntries = new();
 
         public TradingStatusService(TradingStatusEvents tradingStatusEvents)
         {
             _tradingStatusEvents = tradingStatusEvents;
-            _tradingStatusEvents.OnManualOrderEntryUpdate += HandleOrderEntryUpdated;
-            _tradingStatusEvents.OnOrderEntryUpdated += HandleManualOrderEntryUpdated;
-            _tradingStatusEvents.OnOrderEntryUpdatedSubscribe += HandleOnOrderEntryUpdatedSubscribe;
-            _tradingStatusEvents.OnOrderEntryUpdatedUnsubscribe += HandleOnOrderEntryUpdatedUnsubscribe;
-
             _account = Config.Instance.Account;
 
-            _positions = new List<Position>();
-            _orderEntries = new List<OrderEntry>();
+            _tradingStatusEvents.OnManualOrderEntryUpdate += TriggerOrderUpdate;
+            _tradingStatusEvents.OnOrderEntryUpdated += TriggerOrderUpdate;
+            _tradingStatusEvents.OnOrderEntryUpdatedSubscribe += SubscribeToOrderUpdates;
+            _tradingStatusEvents.OnOrderEntryUpdatedUnsubscribe += UnsubscribeFromOrderUpdates;
         }
 
-        private void HandleOnOrderEntryUpdatedSubscribe()
+        private void SubscribeToOrderUpdates()
         {
-            _tradingStatusEvents.OnOrderEntryUpdated += HandleOrderEntryUpdated;
+            _tradingStatusEvents.OnOrderEntryUpdated += TriggerOrderUpdate;
         }
 
-        private void HandleOnOrderEntryUpdatedUnsubscribe()
+        private void UnsubscribeFromOrderUpdates()
         {
-            _tradingStatusEvents.OnOrderEntryUpdated -= HandleOrderEntryUpdated;
+            _tradingStatusEvents.OnOrderEntryUpdated -= TriggerOrderUpdate;
         }
 
-        private void HandleManualOrderEntryUpdated()
+        private void TriggerOrderUpdate()
         {
-            HandleOrderEntryUpdated();
-        }
-
-        private void HandlePositionUpdated()
-        {
-            int totalPositions = _account.Positions.Count;
-            _positions = new List<Position>();
-
-            // No position
-            if (totalPositions == 0)
-            {
-                return;
-            }
-
-            for (int i = 0; i < totalPositions; i++)
-            {
-                Position currentPosition = new Position
-                {
-                    Instrument = _account.Positions[i].Instrument.MasterInstrument.Name,
-                    Quantity = _account.Positions[i].Quantity,
-                    AveragePrice = Math.Round(_account.Positions[i].AveragePrice, 2),
-                    MarketPosition = _account.Positions[i].MarketPosition.ToString(),
-                };
-
-                _positions.Add(currentPosition);
-            }
-        }
-
-        private void HandleOrderEntryUpdated()
-        {
-            int totalOrders = _account.Orders.Count;
-            _orderEntries = new List<OrderEntry>();
-
-            for (int i = 0; i < totalOrders; i++)
-            {
-                if (
-                    _account.Orders[i].OrderState != OrderState.Accepted &&
-                    _account.Orders[i].OrderState != OrderState.Working
-                )
-                {
-                    continue;
-                }
-
-                double price;
-
-                // Check for proper price for limit order since order may have a price for both
-                if (
-                    _account.Orders[i].OrderType == OrderType.StopLimit ||
-                    _account.Orders[i].OrderType == OrderType.StopMarket ||
-                    _account.Orders[i].OrderType == OrderType.MIT
-                )
-                {
-                    price = _account.Orders[i].StopPrice;
-                }
-                else
-                {
-                    price = _account.Orders[i].LimitPrice;
-                }
-
-                // Check if an order with the same type and price already exists
-                var existingOrder = _orderEntries.FirstOrDefault(
-                    entry => entry.Type == _account.Orders[i].OrderType.ToString() && entry.Price == price
-                );
-
-                if (existingOrder != null)
-                {
-                    // Update the quantity if a matching order is found
-                    existingOrder.Quantity += _account.Orders[i].Quantity;
-                }
-                else
-                {
-                    // Add new order entry if no match is found
-                    OrderEntry orderEntry = new OrderEntry
-                    {
-                        Instrument = _account.Orders[i].Instrument.MasterInstrument.Name,
-                        Quantity = _account.Orders[i].Quantity,
-                        Price = Math.Round(price, 2),
-                        Type = _account.Orders[i].OrderType.ToString(),
-                        Action = _account.Orders[i].OrderAction.ToString()
-                    };
-
-                    _orderEntries.Add(orderEntry);
-                }
-            }
-
-            // Sort descending order by price so it appears natural to the chart
-            _orderEntries = _orderEntries.OrderByDescending(order => order.Price).ToList();
-
-            HandlePositionUpdated();
-
+            UpdateOrderEntries();
+            UpdatePositions();
             _tradingStatusEvents.OrderEntryProcessed(_positions, _orderEntries);
         }
+
+        private void UpdatePositions()
+        {
+            _positions = _account.Positions.Select(pos => new Position
+            {
+                Instrument = pos.Instrument.MasterInstrument.Name,
+                Quantity = pos.Quantity,
+                AveragePrice = Math.Round(pos.AveragePrice, 2),
+                MarketPosition = pos.MarketPosition.ToString()
+            }).ToList();
+        }
+
+        private void UpdateOrderEntries()
+        {
+            _orderEntries.Clear();
+
+            foreach (var order in _account.Orders)
+            {
+                if (order.OrderState != OrderState.Accepted && order.OrderState != OrderState.Working)
+                    continue;
+
+                double price = GetOrderPrice(order);
+
+                var existing = _orderEntries.FirstOrDefault(e => e.Type == order.OrderType.ToString() && e.Price == price);
+                if (existing != null)
+                {
+                    existing.Quantity += order.Quantity;
+                }
+                else
+                {
+                    _orderEntries.Add(new OrderEntry
+                    {
+                        Instrument = order.Instrument.MasterInstrument.Name,
+                        Quantity = order.Quantity,
+                        Price = Math.Round(price, 2),
+                        Type = order.OrderType.ToString(),
+                        Action = order.OrderAction.ToString()
+                    });
+                }
+            }
+
+            _orderEntries = _orderEntries.OrderByDescending(e => e.Price).ToList();
+        }
+
+        private double GetOrderPrice(Order order) =>
+            order.OrderType switch
+            {
+                OrderType.StopLimit or OrderType.StopMarket or OrderType.MIT => order.StopPrice,
+                _ => order.LimitPrice
+            };
     }
 }

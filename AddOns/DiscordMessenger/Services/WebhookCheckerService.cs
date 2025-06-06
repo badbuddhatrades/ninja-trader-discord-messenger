@@ -1,9 +1,11 @@
 ﻿using NinjaTrader.Custom.AddOns.DiscordMessenger.Configs;
 using NinjaTrader.Custom.AddOns.DiscordMessenger.Events;
 using NinjaTrader.Custom.AddOns.DiscordMessenger.Models;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Services
 {
@@ -12,99 +14,98 @@ namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Services
         private readonly EventManager _eventManager;
         private readonly WebhookCheckerEvents _webhookCheckerEvents;
         private readonly EventLoggingEvents _eventLoggingEvents;
-        private HttpClient _httpClient;
-        private Timer _timer;
 
+        private readonly HttpClient _httpClient;
+        private Timer _timer;
         private List<string> _webhookUrls;
+
+        private const int CheckIntervalMilliseconds = 60000;
 
         public WebhookCheckerService(
             EventManager eventManager,
             WebhookCheckerEvents webhookCheckerEvents,
-            EventLoggingEvents eventLoggingEvents
-            )
+            EventLoggingEvents eventLoggingEvents)
         {
             _eventManager = eventManager;
-
             _webhookCheckerEvents = webhookCheckerEvents;
-            _webhookCheckerEvents.OnStartWebhookChecker += HandleStartWebhookChecker;
-            _webhookCheckerEvents.OnStopWebhookChecker += HandleStopWebhookChecker;
-
             _eventLoggingEvents = eventLoggingEvents;
 
             _httpClient = new HttpClient();
-
             _webhookUrls = Config.Instance.WebhookUrls;
+
+            _webhookCheckerEvents.OnStartWebhookChecker += StartChecking;
+            _webhookCheckerEvents.OnStopWebhookChecker += StopChecking;
         }
 
-        private void HandleStartWebhookChecker()
+        private void StartChecking()
         {
-            _timer = new Timer(CheckWebhookStatus, null, 0, 60000);
+            _timer = new Timer(async _ => await CheckWebhooksAsync(), null, 0, CheckIntervalMilliseconds);
         }
 
-        private void HandleStopWebhookChecker()
+        private void StopChecking()
         {
             _timer?.Dispose();
             _httpClient?.Dispose();
         }
 
-        private async void CheckWebhookStatus(object state)
+        private async Task CheckWebhooksAsync()
         {
-            List<string> failedWebhookUrls = new List<string>();
-
             int successCount = 0;
-            int failCount = 0;
-            int totalWebhookUrls = _webhookUrls.Count;
+            List<string> failedUrls = new();
 
-            foreach (var webhookUrl in _webhookUrls)
+            foreach (var url in _webhookUrls)
             {
-                try
+                if (await IsWebhookValidAsync(url))
                 {
-                    HttpResponseMessage response = await _httpClient.GetAsync(webhookUrl);
-
-                    if (response.StatusCode == System.Net.HttpStatusCode.OK)
-                    {
-                        successCount++;
-                    }
-                    else
-                    {
-                        failedWebhookUrls.Add(webhookUrl);
-                        failCount++;
-                    }
+                    successCount++;
                 }
-                catch
+                else
                 {
-                    failedWebhookUrls.Add(webhookUrl);
-                    failCount++;
+                    failedUrls.Add(url);
                 }
             }
 
-            Status currentStatus;
+            ReportStatus(successCount, failedUrls);
+        }
 
-            if (failCount == totalWebhookUrls)
+        private async Task<bool> IsWebhookValidAsync(string url)
+        {
+            try
             {
-                currentStatus = Status.Failed;
+                var response = await _httpClient.GetAsync(url);
+                return response.IsSuccessStatusCode;
             }
-            else if (successCount == totalWebhookUrls)
+            catch
             {
-                currentStatus = Status.Success;
+                return false;
             }
-            else
-            {
-                currentStatus = Status.PartialSuccess;
+        }
 
-                foreach (var url in failedWebhookUrls)
+        private void ReportStatus(int successCount, List<string> failedUrls)
+        {
+            int total = _webhookUrls.Count;
+            Status status = successCount switch
+            {
+                0 => Status.Failed,
+                var s when s == total => Status.Success,
+                _ => Status.PartialSuccess
+            };
+
+            if (status == Status.PartialSuccess)
+            {
+                foreach (var url in failedUrls)
                 {
                     _eventManager.PrintMessage($"Webhook Failed: {url}");
                 }
 
                 _eventLoggingEvents.SendRecentEvent(new EventLog
                 {
-                    Status = Status.PartialSuccess,
-                    Message = "Webhook Check Failed"
+                    Status = status,
+                    Message = "Some webhooks failed."
                 });
             }
 
-            _webhookCheckerEvents.UpdateWebhookStatus(currentStatus);
+            _webhookCheckerEvents.UpdateWebhookStatus(status);
         }
     }
 }

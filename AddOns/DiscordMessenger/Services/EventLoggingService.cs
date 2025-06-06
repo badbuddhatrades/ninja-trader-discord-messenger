@@ -1,5 +1,4 @@
-﻿
-using NinjaTrader.Custom.AddOns.DiscordMessenger.Events;
+﻿using NinjaTrader.Custom.AddOns.DiscordMessenger.Events;
 using NinjaTrader.Custom.AddOns.DiscordMessenger.Models;
 using System.Collections.Generic;
 
@@ -8,25 +7,31 @@ namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Services
     public class EventLoggingService
     {
         private readonly EventLoggingEvents _eventLoggingEvents;
-        private List<EventLog> _eventLogs = new List<EventLog>();
+        private readonly Queue<EventLog> _eventLogs;
+
+        private const int MaxLogCount = 5;
 
         public EventLoggingService(EventLoggingEvents eventLoggingEvents)
         {
             _eventLoggingEvents = eventLoggingEvents;
-            _eventLoggingEvents.OnSendRecentEvent += HandleOnRecentEvent;
+            _eventLogs = new Queue<EventLog>(MaxLogCount);
+
+            _eventLoggingEvents.OnSendRecentEvent += OnSendRecentEvent;
         }
 
-        private void HandleOnRecentEvent(EventLog eventLog)
+        private void OnSendRecentEvent(EventLog eventLog)
         {
-            _eventLogs.Add(eventLog);
+            AddEventLog(eventLog);
+            _eventLoggingEvents.RecentEventProcessed(new List<EventLog>(_eventLogs));
+        }
 
-            // Limit
-            if (_eventLogs.Count > 5)
+        private void AddEventLog(EventLog log)
+        {
+            if (_eventLogs.Count >= MaxLogCount)
             {
-                _eventLogs.RemoveAt(0);
+                _eventLogs.Dequeue();
             }
-
-            _eventLoggingEvents.RecentEventProcessed(_eventLogs);
+            _eventLogs.Enqueue(log);
         }
     }
 }

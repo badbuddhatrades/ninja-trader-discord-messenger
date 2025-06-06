@@ -7,40 +7,31 @@ namespace NinjaTrader.Custom.AddOns.DiscordMessenger.Events
     public class TradingStatusEvents
     {
         private readonly EventManager _eventManager;
-        public event Action OnOrderEntryUpdated;
-        public event Action OnManualOrderEntryUpdate;
-        public event Action<List<Position>, List<OrderEntry>> OnOrderEntryProcessed;
-        public event Action OnOrderEntryUpdatedSubscribe;
-        public event Action OnOrderEntryUpdatedUnsubscribe;
+
+        public event Action OrderEntryUpdated;
+        public event Action ManualOrderEntryUpdated;
+        public event Action<List<Position>, List<OrderEntry>> OrderEntryProcessed;
+        public event Action OrderEntryUpdateSubscribed;
+        public event Action OrderEntryUpdateUnsubscribed;
 
         public TradingStatusEvents(EventManager eventManager)
         {
-            _eventManager = eventManager;
+            _eventManager = eventManager ?? throw new ArgumentNullException(nameof(eventManager));
         }
 
-        public void UpdateOrderEntry()
-        {
-            _eventManager.InvokeEvent(OnOrderEntryUpdated);
-        }
+        public void NotifyOrderEntryUpdated() =>
+            _eventManager.InvokeEvent(OrderEntryUpdated);
 
-        public void ManualUpdateOrderEntry()
-        {
-            _eventManager.InvokeEvent(OnManualOrderEntryUpdate);
-        }
+        public void NotifyManualOrderEntryUpdated() =>
+            _eventManager.InvokeEvent(ManualOrderEntryUpdated);
 
-        public void OrderEntryProcessed(List<Position> positions, List<OrderEntry> orderEntries)
-        {
-            _eventManager.InvokeEvent(OnOrderEntryProcessed, positions, orderEntries);
-        }
+        public void NotifyOrderEntryProcessed(List<Position> positions, List<OrderEntry> orderEntries) =>
+            _eventManager.InvokeEvent(OrderEntryProcessed, positions, orderEntries);
 
-        public void OrderEntryUpdatedSubscribe()
-        {
-            _eventManager.InvokeEvent(OnOrderEntryUpdatedSubscribe);
-        }
+        public void NotifyOrderEntryUpdateSubscribed() =>
+            _eventManager.InvokeEvent(OrderEntryUpdateSubscribed);
 
-        public void OrderEntryUpdatedUnsubscribe()
-        {
-            _eventManager.InvokeEvent(OnOrderEntryUpdatedUnsubscribe);
-        }
+        public void NotifyOrderEntryUpdateUnsubscribed() =>
+            _eventManager.InvokeEvent(OrderEntryUpdateUnsubscribed);
     }
 }
