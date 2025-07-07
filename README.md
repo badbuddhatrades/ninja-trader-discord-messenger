@@ -18,7 +18,7 @@ Screenshot - Will only take the screenshot of the last chart that had an updated
 
 You'll find the Discord Messenger under the indicators. Enable it similar to how you will enable an indicator. Make sure to update the `Account Name` to the account you want to use to send the messages.
 
-For usage, you can download the release zip in the release page. You can import this zip file similar to importing a normal NinjaTrader Add-On. https://github.com/WaleeTheRobot/ninja-trader-discord-messenger/releases
+For usage, you can download the release zip in the release page. You can import this zip file similar to importing a normal NinjaTrader Add-On. https://github.com/badbuddhatrades/ninja-trader-discord-messenger/releases
 
 # Development
 
