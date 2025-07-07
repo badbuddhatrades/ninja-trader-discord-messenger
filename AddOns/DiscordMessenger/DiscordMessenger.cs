@@ -39,7 +39,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         [ReadOnly(true)]
         public string Version
         {
-            get { return "2.0.0"; }
+            get { return "2.0.1"; }
             set { }
         }
 
