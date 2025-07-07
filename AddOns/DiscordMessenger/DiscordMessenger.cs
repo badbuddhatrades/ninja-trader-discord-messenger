@@ -7,10 +7,12 @@ using NinjaTrader.Gui;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel; 
 using System.Linq;
 using System.Timers;
 using System.Windows.Media;
 using System.Xml.Serialization;
+using NinjaTrader.NinjaScript; 
 #endregion
 
 namespace NinjaTrader.NinjaScript.Indicators
@@ -45,9 +47,15 @@ namespace NinjaTrader.NinjaScript.Indicators
         [Display(Name = "Webhook URLs", Description = "The URLs for your Discord server webhook. Separate a URL by a comma for multiple URLs.", Order = 1, GroupName = GROUP_NAME)]
         public string WebhookUrls { get; set; }
 
-        [NinjaScriptProperty]
-        [Display(Name = "Account Name", Description = "The account name used for the message.", Order = 2, GroupName = GROUP_NAME)]
-        public string AccountName { get; set; }
+        //[NinjaScriptProperty]
+        //[Display(Name = "Account Name", Description = "The account name used for the message.", Order = 2, GroupName = GROUP_NAME)]
+        //public string AccountName { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Account", Description = "Select which account to monitor and send status for.", Order = 2, GroupName = GROUP_NAME)]
+		[TypeConverter(typeof(AccountNameConverter))]
+	 public string AccountName { get; set; }
+		
 
         [NinjaScriptProperty]
         [Display(Name = "Screenshot Location", Description = "The location for the screenshot.", Order = 3, GroupName = GROUP_NAME)]
@@ -91,7 +99,11 @@ namespace NinjaTrader.NinjaScript.Indicators
 
                 // Properties
                 WebhookUrls = "";
-                AccountName = "Sim101";
+                                // default to the first account if you like
+                AccountName = Account.All.Any() 
+                    ? Account.All[0].Name 
+                    : string.Empty;
+				
                 ScreenshotLocation = "C:\\screenshots";
                 EmbededColor = Brushes.DodgerBlue;
             }
@@ -104,9 +116,12 @@ namespace NinjaTrader.NinjaScript.Indicators
                 _debounceTimer.Elapsed += OnDebounceElapsed;
                 _debounceTimer.AutoReset = false;
 
+            	// resolve the actual Account object here:
                 Account account = Account.All.FirstOrDefault(a => a.Name == AccountName);
-
-                if (account != null)
+                if (account == null)
+                    Print($"[DiscordMessenger] Could not find account '{AccountName}'");
+                
+				if (account != null)
                 {
                     account.OrderUpdate += OnOrderUpdate;
 
@@ -202,9 +217,12 @@ namespace NinjaTrader.NinjaScript.Indicators
             string trimmedScreenshotLocation = ScreenshotLocation.TrimEnd('\\');
 
             Config.Instance.WebhookUrls = GetWebhookUrls();
+            //Config.Instance.Account = account;
+            //Config.Instance.AccountName = AccountName;
             Config.Instance.Account = account;
-            Config.Instance.AccountName = AccountName;
-            Config.Instance.ScreenshotLocation = trimmedScreenshotLocation;
+            Config.Instance.AccountName = account.Name;
+			
+			Config.Instance.ScreenshotLocation = trimmedScreenshotLocation;
             Config.Instance.EmbededColor = EmbededColor;
         }
 
